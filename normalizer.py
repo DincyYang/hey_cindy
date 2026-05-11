@@ -1,6 +1,5 @@
 # normalizer.py
 import os
-import json
 from dataclasses import dataclass
 from typing import Optional
 import anthropic
@@ -43,18 +42,15 @@ Reply with ONLY a JSON object in this exact format, nothing else:
         ]
     )
 
+    import json
     try:
-        text = message.content[0].text.strip()
-        if text.startswith("```"):
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        result = json.loads(text.strip())
+        result = json.loads(message.content[0].text)
         return NormalizedResult(
             normalized=result.get("command", "unknown"),
             confidence=result.get("confidence", 0.0),
             reason=result.get("reason", "llm_classification"),
             cleaned_text=cleaned,
         )
-    except Exception as e:
-        return NormalizedResult("unknown", 0.0, f"llm_parse_error: {e}", cleaned)
+    except Exception:
+        return NormalizedResult("unknown", 0.0, "llm_parse_error", cleaned)
+
