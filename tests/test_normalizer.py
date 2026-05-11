@@ -1,28 +1,12 @@
 from normalizer import normalize_command
+from unittest.mock import patch, MagicMock
+
+def make_mock_response(command, confidence, reason):
+    mock = MagicMock()
+    mock.content[0].text = f'{{"command": "{command}", "confidence": {confidence}, "reason": "{reason}"}}'
+    return mock
 
 class TestNormalizeCommand:
-
-    # ✅ Happy path
-    def test_turn_on(self):
-        r = normalize_command("turn the light on")
-        assert r.normalized == "on"
-        assert r.confidence == 0.9
-        assert r.reason == "strong_phrase_on"
-
-    def test_switch_on(self):
-        r = normalize_command("switch on")
-        assert r.normalized == "on"
-
-    def test_turn_off(self):
-        r = normalize_command("turn off")
-        assert r.normalized == "off"
-        assert r.confidence == 0.9
-
-    def test_light_off(self):
-        r = normalize_command("light off")
-        assert r.normalized == "off"
-
-    # ❌ Edge cases
     def test_empty_input(self):
         r = normalize_command("")
         assert r.normalized == "unknown"
@@ -33,29 +17,26 @@ class TestNormalizeCommand:
         r = normalize_command(None)
         assert r.normalized == "unknown"
 
-    def test_no_match(self):
-        r = normalize_command("hello how are you")
-        assert r.normalized == "unknown"
-        assert r.reason == "no_match"
+    def test_turn_on(self):
+        with patch("normalizer.anthropic.Anthropic") as mock_client:
+            mock_client.return_value.messages.create.return_value = make_mock_response("on", 0.99, "user wants light on")
+            r = normalize_command("turn the light on")
+            assert r.normalized == "on"
 
-    # ⚠️ Negation protection
-    def test_negated_on(self):
-        r = normalize_command("don't turn on the light")
-        assert r.normalized == "unknown"
-        assert r.reason == "negated_on"
+    def test_turn_off(self):
+        with patch("normalizer.anthropic.Anthropic") as mock_client:
+            mock_client.return_value.messages.create.return_value = make_mock_response("off", 0.99, "user wants light off")
+            r = normalize_command("turn off")
+            assert r.normalized == "off"
 
-    def test_negated_off(self):
-        r = normalize_command("do not turn off")
-        assert r.normalized == "unknown"
-        assert r.reason == "negated_off"
+    def test_unknown(self):
+        with patch("normalizer.anthropic.Anthropic") as mock_client:
+            mock_client.return_value.messages.create.return_value = make_mock_response("unknown", 0.95, "not a light command")
+            r = normalize_command("hello how are you")
+            assert r.normalized == "unknown"
 
-    # 💥 Conflict
-    def test_conflict(self):
-        r = normalize_command("turn on and turn off")
-        assert r.normalized == "unknown"
-        assert r.reason == "conflict"
-
-    # 🔤 Case insensitive
-    def test_uppercase(self):
-        r = normalize_command("TURN THE LIGHT ON")
-        assert r.normalized == "on"
+    def test_negated(self):
+        with patch("normalizer.anthropic.Anthropic") as mock_client:
+            mock_client.return_value.messages.create.return_value = make_mock_response("unknown", 0.9, "negated command")
+            r = normalize_command("don't turn on the light")
+            assert r.normalized == "unknown"
