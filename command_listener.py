@@ -28,7 +28,10 @@ def _record_audio(duration_s: float, sample_rate: int) -> bytes:
 def _recognize_google(audio_bytes: bytes, sample_rate: int) -> str:
     recognizer = sr.Recognizer()
     audio_data = sr.AudioData(audio_bytes, sample_rate, 2)
-    text = recognizer.recognize_google(audio_data)
+    try:
+        text = recognizer.recognize_google(audio_data, language="zh-CN")
+    except sr.UnknownValueError:
+        text = recognizer.recognize_google(audio_data, language="en-US")
     return text.lower().strip()
 
 
