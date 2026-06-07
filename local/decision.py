@@ -1,8 +1,14 @@
 # decision.py
+"""Action policy: map a classified intent to what the assistant should do.
+
+Kept separate from the classifier so the policy can be tested without the LLM
+and so "clarify" / "reject" behaviour is driven by the classifier's category
+code rather than free-text reasons.
+"""
 from dataclasses import dataclass
 from typing import Optional
 
-from normalizer import NormalizedResult
+from local.normalizer import NormalizedResult
 
 
 @dataclass(frozen=True)
@@ -14,25 +20,17 @@ class Decision:
 
 
 def decide_from_result(result: NormalizedResult) -> Decision:
-    # 1) 明确可执行命令
-    if result.normalized == "on":
+    # 1) Actionable command from the classifier.
+    if result.normalized in ("on", "off"):
         return Decision(
             action="execute",
-            command="on",
-            message="Turning the light on.",
+            command=result.normalized,
+            message=f"Turning the light {result.normalized}.",
             reason=result.reason,
         )
 
-    if result.normalized == "off":
-        return Decision(
-            action="execute",
-            command="off",
-            message="Turning the light off.",
-            reason=result.reason,
-        )
-
-    # 2) 冲突，需要澄清
-    if result.reason == "conflict":
+    # 2) Not actionable — branch on the category the classifier returned.
+    if result.category == "conflict":
         return Decision(
             action="clarify",
             command=None,
@@ -40,8 +38,7 @@ def decide_from_result(result: NormalizedResult) -> Decision:
             reason=result.reason,
         )
 
-    # 3) 否定命令，不执行
-    if result.reason in ("negated_on", "negated_off"):
+    if result.category == "negated":
         return Decision(
             action="reject",
             command=None,
@@ -49,7 +46,15 @@ def decide_from_result(result: NormalizedResult) -> Decision:
             reason=result.reason,
         )
 
-    # 4) 其余情况先忽略
+    if result.category == "ambiguous":
+        return Decision(
+            action="clarify",
+            command=None,
+            message="Did you want the light on or off?",
+            reason=result.reason,
+        )
+
+    # 3) Anything else: don't act.
     return Decision(
         action="ignore",
         command=None,

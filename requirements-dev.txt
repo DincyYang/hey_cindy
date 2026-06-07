@@ -1,0 +1,8 @@
+# Test / CI dependencies.
+# Deliberately a lightweight subset: the test suite only imports the pure-logic
+# modules (normalizer, decision, cloud_client), so the audio libraries in
+# requirements.txt are not needed and won't fail on headless CI runners.
+pytest==9.0.3
+pytest-cov==7.1.0
+anthropic==0.101.0
+requests==2.32.5

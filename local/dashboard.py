@@ -82,11 +82,15 @@ HTML = """
 </html>
 """
 
-def cloud_post(text: str):
+AUTH_HEADERS = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+
+
+def cloud_post(command: str):
+    # Cloud's /command expects {"command": "on"|"off", ...}, not {"text": ...}.
     return requests.post(
         f"{CLOUD}/command",
-        json={"text": text},
-        headers={"Authorization": f"Bearer {TOKEN}"},
+        json={"command": command, "raw_text": command, "source": "dashboard"},
+        headers=AUTH_HEADERS,
         timeout=10,
     )
 
@@ -96,7 +100,8 @@ def home():
 
 @app.get("/api/state")
 def api_state():
-    r = requests.get(f"{CLOUD}/state", timeout=10)
+    # /state requires the bearer token too.
+    r = requests.get(f"{CLOUD}/state", headers=AUTH_HEADERS, timeout=10)
     r.raise_for_status()
     return jsonify(r.json())
 
