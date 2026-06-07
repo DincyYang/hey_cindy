@@ -11,6 +11,6 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install pytest pytest-cov requests pyttsx3 anthropic || true
+        run: pip install -r requirements-dev.txt
       - name: Run tests
-        run: pytest --cov=. --cov-report=xml
+        run: pytest --cov=. --cov-report=term-missing --cov-report=xml

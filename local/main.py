@@ -1,19 +1,25 @@
-# voice_to_light_wakeword.py
-from wake_word import WakeWordDetector
-from command import execute, speak
-from command_listener import listen_for_command
+# local/main.py — entry point. Run with: python -m local.main
+import os
 import sys
 import time
-import numpy as np
-import simpleaudio as sa
 import logging
 import threading
-from normalizer import normalize_command
-from decision import decide_from_result
+
+import numpy as np
+import simpleaudio as sa
+
+from local.wake_word import WakeWordDetector
+from local.command import execute, speak
+from local.command_listener import listen_for_command
+from local.normalizer import normalize_command
+from local.decision import decide_from_result
 
 # ========= Configuration =========
-ACCESS_KEY = "b9uFY0Z2mfDVvhNNa9p3DxHzEWL5T/yHaS+NqIO7/KQBoBmKWJJugA=="
-KEYWORD_PATH = "Hey-Cindy_en_mac_v4_0_0/Hey-Cindy_en_mac_v4_0_0.ppn"
+# Get a free Porcupine access key at https://console.picovoice.ai/
+ACCESS_KEY = os.environ.get("PORCUPINE_ACCESS_KEY", "")
+KEYWORD_PATH = os.environ.get(
+    "HEY_CINDY_KEYWORD_PATH", "Hey-Cindy_en_mac_v4_0_0/Hey-Cindy_en_mac_v4_0_0.ppn"
+)
 DEVICE_INDEX = None  # system default mic
 # ==================================
 
@@ -125,6 +131,11 @@ def handle_wake(detector: WakeWordDetector):
 def main():
     print("Voice to light with wake word started")
     logging.info("Program started")
+
+    if not ACCESS_KEY:
+        print("❌ PORCUPINE_ACCESS_KEY is not set. "
+              "Get a free key at https://console.picovoice.ai/ and export it.")
+        sys.exit(1)
 
     detector = WakeWordDetector(
         access_key=ACCESS_KEY,

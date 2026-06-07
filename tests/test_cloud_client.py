@@ -1,9 +1,9 @@
 from unittest.mock import patch, MagicMock
-from cloud_client import send_command
+from local.cloud_client import send_command
 
 class TestSendCommand:
 
-    @patch("cloud_client.requests.post")
+    @patch("local.cloud_client.requests.post")
     def test_success_on(self, mock_post):
         mock_post.return_value = MagicMock(
             ok=True,
@@ -14,7 +14,7 @@ class TestSendCommand:
         assert result["ok"] is True
         assert result["status_code"] == 200
 
-    @patch("cloud_client.requests.post")
+    @patch("local.cloud_client.requests.post")
     def test_http_error(self, mock_post):
         mock_post.return_value = MagicMock(
             ok=False,
@@ -25,7 +25,7 @@ class TestSendCommand:
         assert result["ok"] is False
         assert result["error"] == "http_error"
 
-    @patch("cloud_client.requests.post")
+    @patch("local.cloud_client.requests.post")
     def test_timeout(self, mock_post):
         import requests
         mock_post.side_effect = requests.Timeout()
@@ -33,7 +33,7 @@ class TestSendCommand:
         assert result["ok"] is False
         assert result["error"] == "timeout"
 
-    @patch("cloud_client.requests.post")
+    @patch("local.cloud_client.requests.post")
     def test_payload_contains_command(self, mock_post):
         mock_post.return_value = MagicMock(
             ok=True, status_code=200,

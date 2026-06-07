@@ -1,15 +1,30 @@
-# Ignore virtual env and system files
+# Virtual env and caches
 .venv/
 .vscode/
 __pycache__/
 *.pyc
-*.log
-*.db
+.pytest_cache/
+.coverage
+coverage.xml
+
+# OS junk
+.DS_Store
+
+# Secrets — never commit keys or env files
+*.pem
 .env
 
-# Ignore local docs
+# Logs / local databases
+*.log
+*.db
+
+# Local docs / scratch
 PROJECT_LOG.md
 Running.md
 
-# Ignore assets if needed
+# Personal planning docs — kept local (contain career / interview notes)
+DEVELOPMENT_PLAN.md
+*.docx
+
+# Wake-word model assets (downloaded per machine)
 Hey-Cindy_en_mac_v4_0_0/

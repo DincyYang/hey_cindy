@@ -1,7 +1,6 @@
 # command.py
-import requests
 import pyttsx3
-from cloud_client import send_command  # 加这一行
+from local.cloud_client import send_command
 
 def speak(text: str):
     engine = pyttsx3.init()
