@@ -66,7 +66,7 @@ HTML = """
     }
 
     async function refresh() {
-      const res = await fetch('/api/state');
+      const res = await fetch('/api/state', { cache: 'no-store' });
       const data = await res.json();
 
       const el = document.getElementById('status');
@@ -114,9 +114,9 @@ def api_command():
 
 @app.route("/api/toggle", methods=["POST"])
 def api_toggle():
-    # 1) 先从云端拿当前状态
+    # 1) 先从云端拿当前状态（/state 需要 token）
     try:
-        r = requests.get(f"{CLOUD}/state", timeout=2)
+        r = requests.get(f"{CLOUD}/state", headers=AUTH_HEADERS, timeout=2)
         r.raise_for_status()
         data = r.json()
         current = data.get("light", "off")

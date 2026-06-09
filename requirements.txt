@@ -1,6 +1,9 @@
 # Local voice-assistant runtime dependencies.
 # (Cloud API deps live in cloud/requirements.txt.)
 
+# Config
+python-dotenv==1.2.2     # auto-load .env
+
 # Intent classification
 anthropic==0.101.0
 
