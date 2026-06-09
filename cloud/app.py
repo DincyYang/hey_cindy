@@ -1,50 +1,29 @@
-# app.py
+# cloud/app.py
 import os
 from datetime import datetime, timezone
 from typing import Optional
+
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
-from sqlalchemy.orm import declarative_base, sessionmaker
 
-# ── Config ───────────────────────────────────────────
+from cloud.state import LightState
+from cloud.db import make_session_factory, log_command, recent_commands
+
 API_TOKEN = os.environ.get("HEY_CINDY_TOKEN", "cindy-dev-token-123")
-DB_URL    = os.environ.get("DATABASE_URL", "sqlite:////home/ubuntu/hey-cindy-cloud/hey_cindy.db")
 
-# ── SQLite ────────────────────────────────────────────
-engine       = create_engine(DB_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(bind=engine)
-Base         = declarative_base()
+# Wire up the two stores once at startup.
+light = LightState()                       # Redis (+ in-memory fallback)
+session_factory = make_session_factory()   # PostgreSQL
 
-class CommandLog(Base):
-    __tablename__ = "command_logs"
-    id         = Column(Integer, primary_key=True, index=True)
-    command    = Column(String(10))
-    raw_text   = Column(String(500), nullable=True)
-    source     = Column(String(20), default="voice")
-    confidence = Column(Float, nullable=True)
-    reason     = Column(String(50), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-Base.metadata.create_all(bind=engine)
-
-# ── 内存状态（替代 Redis）────────────────────────────
-_light_state = {"value": "off"}
-
-def get_light_state() -> str:
-    return _light_state["value"]
-
-def set_light_state(state: str):
-    _light_state["value"] = state
-
-# ── Auth ──────────────────────────────────────────────
-def require_token(authorization: str | None):
+def require_token(authorization: Optional[str]):
     if authorization != f"Bearer {API_TOKEN}":
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-# ── FastAPI ───────────────────────────────────────────
-app = FastAPI(title="HeyCindy Cloud API", version="2.0")
+
+app = FastAPI(title="HeyCindy Cloud API", version="3.0")
 START_TIME = datetime.now(timezone.utc)
+
 
 class CommandRequest(BaseModel):
     command: str
@@ -53,39 +32,31 @@ class CommandRequest(BaseModel):
     reason: Optional[str] = None
     source: str = "voice"
 
+
 @app.get("/state")
 def get_state(authorization: Optional[str] = Header(None)):
     require_token(authorization)
-    db = SessionLocal()
-    logs = db.query(CommandLog).order_by(CommandLog.created_at.desc()).limit(10).all()
-    db.close()
-    return {
-        "light": get_light_state(),
-        "history": [
-            {"timestamp": str(l.created_at), "raw": l.raw_text, "normalized": l.command}
-            for l in reversed(logs)
-        ],
-        "count": len(logs),
-    }
+    history = recent_commands(session_factory)
+    return {"light": light.get(), "history": history, "count": len(history)}
+
 
 @app.post("/command")
 def post_command(req: CommandRequest, authorization: Optional[str] = Header(None)):
     require_token(authorization)
     if req.command not in ("on", "off"):
         raise HTTPException(status_code=400, detail="command must be 'on' or 'off'")
-    set_light_state(req.command)
-    db = SessionLocal()
-    log = CommandLog(
+
+    light.set(req.command)               # critical path  -> Redis (with fallback)
+    log_command(                         # non-critical   -> Postgres (errors swallowed)
+        session_factory,
         command=req.command,
         raw_text=req.raw_text,
         source=req.source,
         confidence=req.confidence,
         reason=req.reason,
     )
-    db.add(log)
-    db.commit()
-    db.close()
     return {"ok": True, "light": req.command}
+
 
 @app.get("/health")
 def health():

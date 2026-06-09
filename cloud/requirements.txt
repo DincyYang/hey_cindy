@@ -1,4 +1,7 @@
 fastapi==0.115.0
 uvicorn==0.30.6
-sqlalchemy==2.0.36
 pydantic==2.9.2
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.12   # PostgreSQL driver
+redis==7.4.0              # light-state store
+python-dotenv==1.2.2      # auto-load .env

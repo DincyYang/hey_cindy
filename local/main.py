@@ -68,6 +68,7 @@ def handle_wake(detector: WakeWordDetector):
     if raw_text.strip().lower() in ("quit", "exit", "stop"):
         print("👋 Quitting...")
         logging.info("Quit command received")
+        speak("Goodbye. See you next time.")
         sys.exit(0)
 
     # 2) 归一化
@@ -109,6 +110,18 @@ def handle_wake(detector: WakeWordDetector):
             f"reason={result.reason}"
         )
         speak(decision.message)
+
+        # Follow-up: listen once for the answer — no need to say the wake word again.
+        followup = listen_for_command(timeout=3)
+        if followup:
+            fu = decide_from_result(normalize_command(followup))
+            if fu.action == "execute":
+                print(f"👉 Executing: {fu.command}")
+                execute(fu.command)
+            else:
+                speak("Okay, never mind.")
+        else:
+            speak("Okay, never mind.")
 
     elif decision.action == "reject":
         print(f"⛔ Rejected: {decision.message}")

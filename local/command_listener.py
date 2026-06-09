@@ -1,14 +1,14 @@
 # command_listener.py
-import re
+import os
 import time
 import sounddevice as sd
 import numpy as np
 import speech_recognition as sr
 
-
-_QUIT_PAT = re.compile(r"\b(quit|exit|stop|goodbye|bye)\b", re.I)
-_ON_PAT = re.compile(r"\b(on|turn\s+on|lights?\s+on|lamp\s+on)\b", re.I)
-_OFF_PAT = re.compile(r"\b(off|turn\s+off|lights?\s+off|lamp\s+off)\b", re.I)
+# Primary STT language. English first by default: the Chinese recognizer tends to
+# "succeed" with a wrong homophone (e.g. "light off" -> "white of") instead of
+# raising, which starved the English fallback. Override with HEY_CINDY_STT_LANG.
+PRIMARY_LANG = os.environ.get("HEY_CINDY_STT_LANG", "en-US")
 
 
 def _record_audio(duration_s: float, sample_rate: int) -> bytes:
@@ -28,11 +28,15 @@ def _record_audio(duration_s: float, sample_rate: int) -> bytes:
 def _recognize_google(audio_bytes: bytes, sample_rate: int) -> str:
     recognizer = sr.Recognizer()
     audio_data = sr.AudioData(audio_bytes, sample_rate, 2)
-    try:
-        text = recognizer.recognize_google(audio_data, language="zh-CN")
-    except sr.UnknownValueError:
-        text = recognizer.recognize_google(audio_data, language="en-US")
-    return text.lower().strip()
+    # Try the primary language first, then the other as a fallback.
+    langs = [PRIMARY_LANG] + [l for l in ("en-US", "zh-CN") if l != PRIMARY_LANG]
+    last_err = sr.UnknownValueError()
+    for lang in langs:
+        try:
+            return recognizer.recognize_google(audio_data, language=lang).lower().strip()
+        except sr.UnknownValueError as e:
+            last_err = e
+    raise last_err
 
 
 def listen_for_command(timeout=3, sample_rate=16000, retries=1, pre_silence=0.15):

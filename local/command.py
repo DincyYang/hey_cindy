@@ -13,7 +13,7 @@ def execute(command: str) -> bool:
     cmd = command.lower().strip()
 
     if cmd in ("quit", "exit", "stop", "bye", "goodbye"):
-        speak("Goodbye.")
+        speak("Goodbye. See you next time.")
         print("👋 Exiting program")
         return False
 

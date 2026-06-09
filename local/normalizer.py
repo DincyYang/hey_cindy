@@ -15,9 +15,9 @@ import anthropic
 
 logger = logging.getLogger(__name__)
 
-# Migrated from claude-sonnet-4-5. For this binary classification a cheaper
-# model (claude-haiku-4-5) would also work — override via HEY_CINDY_MODEL.
-MODEL = os.environ.get("HEY_CINDY_MODEL", "claude-sonnet-4-6")
+# Haiku is fast + cheap and plenty for this classification; the LLM is only
+# consulted for ambiguous input anyway (see the fast path below).
+MODEL = os.environ.get("HEY_CINDY_MODEL", "claude-haiku-4-5")
 LLM_TIMEOUT_S = float(os.environ.get("HEY_CINDY_LLM_TIMEOUT", "5"))
 
 VALID_COMMANDS = ("on", "off", "unknown")
@@ -89,10 +89,17 @@ def normalize_command(raw_text: Optional[str]) -> NormalizedResult:
 
     cleaned = raw_text.lower().strip()
 
+    # Fast path: an unambiguous keyword match answers instantly — no network
+    # round-trip to the LLM. This is what makes "light off" feel snappy.
+    kw = _keyword_fallback(cleaned)
+    if kw.category == "clear":
+        return kw
+
+    # Ambiguous / unrelated input: ask the LLM for a better read, if configured.
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         logger.warning("ANTHROPIC_API_KEY not set; using keyword fallback")
-        return _keyword_fallback(cleaned)
+        return kw
 
     try:
         client = anthropic.Anthropic(api_key=api_key, timeout=LLM_TIMEOUT_S, max_retries=1)
@@ -120,4 +127,4 @@ def normalize_command(raw_text: Optional[str]) -> NormalizedResult:
         )
     except Exception as e:
         logger.warning("LLM classification failed (%s); using keyword fallback", e)
-        return _keyword_fallback(cleaned)
+        return kw
