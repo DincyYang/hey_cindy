@@ -4,11 +4,17 @@
 Primary path: Claude classifies the command. If the API key is missing or the
 call fails/times out, we fall back to a simple offline keyword matcher so the
 voice assistant still does something reasonable instead of crashing.
+
+Every classification is instrumented: wall-clock latency, whether the LLM was
+consulted at all, and the exact token usage the API reported. Those numbers ride
+along with the result so the caller can ship them to the cloud, where they turn
+into the cost/latency panel on the dashboard.
 """
 import os
 import json
+import time
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 import anthropic
@@ -32,6 +38,11 @@ class NormalizedResult:
     category: str         # one of VALID_CATEGORIES
     reason: str           # human-readable explanation
     cleaned_text: str
+    # --- instrumentation (defaulted so existing constructor calls still work) ---
+    latency_ms: float = 0.0     # wall-clock time spent classifying
+    input_tokens: int = 0       # 0 when the fast path answered without the LLM
+    output_tokens: int = 0
+    used_llm: bool = False
 
 
 _PROMPT = """You are the intent classifier for a smart-home light assistant.
@@ -65,6 +76,19 @@ def _extract_json(text: str) -> str:
     return text
 
 
+def _usage_tokens(message) -> tuple[int, int]:
+    """Pull (input, output) token counts off a Messages API response.
+
+    Defensive: a mocked or partial response in tests has no real usage object,
+    and instrumentation must never be the thing that breaks classification.
+    """
+    usage = getattr(message, "usage", None)
+    try:
+        return int(getattr(usage, "input_tokens", 0)), int(getattr(usage, "output_tokens", 0))
+    except (TypeError, ValueError):
+        return 0, 0
+
+
 def _keyword_fallback(cleaned: str) -> NormalizedResult:
     """Offline degraded path used when the LLM is unavailable."""
     words = set(cleaned.replace("'", " ").split())
@@ -83,12 +107,7 @@ def _keyword_fallback(cleaned: str) -> NormalizedResult:
     return NormalizedResult("unknown", 0.3, "unrelated", "keyword: no match", cleaned)
 
 
-def normalize_command(raw_text: Optional[str]) -> NormalizedResult:
-    if not raw_text or not raw_text.strip():
-        return NormalizedResult("unknown", 0.0, "unrelated", "empty_input", "")
-
-    cleaned = raw_text.lower().strip()
-
+def _classify(raw_text: str, cleaned: str) -> NormalizedResult:
     # Fast path: an unambiguous keyword match answers instantly — no network
     # round-trip to the LLM. This is what makes "light off" feel snappy.
     kw = _keyword_fallback(cleaned)
@@ -109,6 +128,7 @@ def normalize_command(raw_text: Optional[str]) -> NormalizedResult:
             thinking={"type": "disabled"},
             messages=[{"role": "user", "content": _PROMPT.format(raw_text=raw_text)}],
         )
+        in_tok, out_tok = _usage_tokens(message)
         data = json.loads(_extract_json(message.content[0].text.strip()))
 
         command = data.get("command", "unknown")
@@ -124,7 +144,33 @@ def normalize_command(raw_text: Optional[str]) -> NormalizedResult:
             category=category,
             reason=data.get("reason", "llm_classification"),
             cleaned_text=cleaned,
+            input_tokens=in_tok,
+            output_tokens=out_tok,
+            used_llm=True,
         )
     except Exception as e:
         logger.warning("LLM classification failed (%s); using keyword fallback", e)
         return kw
+
+
+def normalize_command(raw_text: Optional[str]) -> NormalizedResult:
+    started = time.perf_counter()
+
+    if not raw_text or not raw_text.strip():
+        result = NormalizedResult("unknown", 0.0, "unrelated", "empty_input", "")
+    else:
+        cleaned = raw_text.lower().strip()
+        result = _classify(raw_text, cleaned)
+
+    result = replace(result, latency_ms=round((time.perf_counter() - started) * 1000, 2))
+
+    # One structured line per command — the raw material for the cost/latency
+    # panel and for grepping the log after a session.
+    logger.info(
+        "classify path=%s command=%s category=%s confidence=%.2f "
+        "latency_ms=%.2f input_tokens=%d output_tokens=%d",
+        "llm" if result.used_llm else "keyword",
+        result.normalized, result.category, result.confidence,
+        result.latency_ms, result.input_tokens, result.output_tokens,
+    )
+    return result

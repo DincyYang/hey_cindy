@@ -15,10 +15,14 @@ def send_command(
     confidence: Optional[float] = None,
     reason: Optional[str] = None,
     source: str = "voice",
+    latency_ms: Optional[float] = None,
+    input_tokens: Optional[int] = None,
+    output_tokens: Optional[int] = None,
     timeout_s: int = DEFAULT_TIMEOUT_S,
 ) -> Dict[str, Any]:
     """
-    Send a normalized command to the cloud service.
+    Send a normalized command to the cloud service, along with the latency and
+    token usage the local NLP pipeline measured for it.
     Returns a dict with either {"ok": True, ...} or {"ok": False, "error": "...", ...}.
     """
     url = f"{CLOUD_BASE}/command"
@@ -29,6 +33,9 @@ def send_command(
         "confidence": confidence,
         "reason": reason,
         "source": source,
+        "latency_ms": latency_ms,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
     }
 
     headers = {

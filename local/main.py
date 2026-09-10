@@ -4,6 +4,7 @@ import sys
 import time
 import logging
 import threading
+from time import perf_counter
 
 import numpy as np
 import simpleaudio as sa
@@ -71,7 +72,8 @@ def handle_wake(detector: WakeWordDetector):
         speak("Goodbye. See you next time.")
         sys.exit(0)
 
-    # 2) 归一化
+    # 2) 归一化（计时：整条 NLP 流水线，含分类 + 决策）
+    pipeline_start = perf_counter()
     result = normalize_command(raw_text)
 
     print(f"🎧 raw_text: {raw_text}")
@@ -85,6 +87,7 @@ def handle_wake(detector: WakeWordDetector):
 
     # 3) 决策层
     decision = decide_from_result(result)
+    pipeline_ms = (perf_counter() - pipeline_start) * 1000
 
     print(
         f"🧭 decision: action={decision.action} "
@@ -94,11 +97,21 @@ def handle_wake(detector: WakeWordDetector):
         f"Decision: action={decision.action} "
         f"command={decision.command} reason={decision.reason}"
     )
+    logging.info(
+        f"Metrics: path={'llm' if result.used_llm else 'keyword'} "
+        f"classify_ms={result.latency_ms:.2f} pipeline_ms={pipeline_ms:.2f} "
+        f"input_tokens={result.input_tokens} output_tokens={result.output_tokens}"
+    )
+    print(
+        f"📊 {'llm' if result.used_llm else 'keyword'} path | "
+        f"classify {result.latency_ms:.0f}ms | pipeline {pipeline_ms:.0f}ms | "
+        f"tokens {result.input_tokens}in/{result.output_tokens}out"
+    )
 
     # 4) 根据决策执行
     if decision.action == "execute":
         print(f"👉 Executing: {decision.command}")
-        should_continue = execute(decision.command)
+        should_continue = execute(decision.command, result, pipeline_ms=pipeline_ms)
 
         if should_continue is False:
             sys.exit(0)
@@ -114,10 +127,13 @@ def handle_wake(detector: WakeWordDetector):
         # Follow-up: listen once for the answer — no need to say the wake word again.
         followup = listen_for_command(timeout=3)
         if followup:
-            fu = decide_from_result(normalize_command(followup))
+            fu_start = perf_counter()
+            fu_result = normalize_command(followup)
+            fu = decide_from_result(fu_result)
+            fu_ms = (perf_counter() - fu_start) * 1000
             if fu.action == "execute":
                 print(f"👉 Executing: {fu.command}")
-                execute(fu.command)
+                execute(fu.command, fu_result, pipeline_ms=fu_ms)
             else:
                 speak("Okay, never mind.")
         else:
