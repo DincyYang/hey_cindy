@@ -12,5 +12,7 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+      # Coverage scope and the 85% gate live in pytest.ini, so a local `pytest`
+      # enforces exactly what CI does. Tests use fakeredis + SQLite — no services.
       - name: Run tests
-        run: pytest --cov=. --cov-report=term-missing --cov-report=xml
+        run: pytest --cov-report=term-missing --cov-report=xml
