@@ -2,5 +2,5 @@
 try:
     from dotenv import load_dotenv
     load_dotenv()
-except ImportError:
+except ImportError:  # pragma: no cover - dotenv is a hard dependency
     pass

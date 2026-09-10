@@ -7,7 +7,9 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from cloud.state import LightState
-from cloud.db import make_session_factory, log_command, recent_commands
+from cloud.db import (
+    make_session_factory, log_command, recent_commands, usage_summary,
+)
 
 API_TOKEN = os.environ.get("HEY_CINDY_TOKEN", "cindy-dev-token-123")
 
@@ -31,6 +33,11 @@ class CommandRequest(BaseModel):
     confidence: Optional[float] = None
     reason: Optional[str] = None
     source: str = "voice"
+    # Instrumentation measured by the caller's NLP pipeline. Optional: the
+    # dashboard runs no NLP and sends none of it.
+    latency_ms: Optional[float] = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
 
 
 @app.get("/state")
@@ -54,8 +61,18 @@ def post_command(req: CommandRequest, authorization: Optional[str] = Header(None
         source=req.source,
         confidence=req.confidence,
         reason=req.reason,
+        latency_ms=req.latency_ms,
+        input_tokens=req.input_tokens,
+        output_tokens=req.output_tokens,
     )
     return {"ok": True, "light": req.command}
+
+
+@app.get("/metrics")
+def get_metrics(authorization: Optional[str] = Header(None)):
+    """Rolling cost + latency view over recent commands (drives the dashboard)."""
+    require_token(authorization)
+    return usage_summary(session_factory)
 
 
 @app.get("/health")

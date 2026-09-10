@@ -28,3 +28,6 @@ DEVELOPMENT_PLAN.md
 
 # Wake-word model assets (downloaded per machine)
 Hey-Cindy_en_mac_v4_0_0/
+
+# Local preview/launch config (absolute paths, machine specific)
+.claude/

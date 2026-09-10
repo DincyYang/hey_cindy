@@ -10,3 +10,5 @@ psycopg2-binary==2.9.12   # postgres dialect is imported eagerly by create_engin
 redis==7.4.0
 fakeredis==2.36.1
 python-dotenv==1.2.2
+fastapi==0.121.2
+httpx==0.28.1              # required by fastapi.testclient
